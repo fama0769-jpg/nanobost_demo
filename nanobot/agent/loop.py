@@ -47,6 +47,8 @@ class AgentLoop:
     """
 
     _TOOL_RESULT_MAX_CHARS = 16_000
+    _INPUT_GATE_SKILL = "input-completeness-gate-zh"
+    _INPUT_GATE_META_KEY = "input_completeness_gate"
 
     def __init__(
         self,
@@ -179,6 +181,86 @@ class AgentLoop:
                 return tc.name
             return f'{tc.name}("{val[:40]}…")' if len(val) > 40 else f'{tc.name}("{val}")'
         return ", ".join(_fmt(tc) for tc in tool_calls)
+
+    @staticmethod
+    def _last_assistant_text(session: Session) -> str:
+        """Get last assistant text content."""
+        for item in reversed(session.messages):
+            if item.get("role") != "assistant":
+                continue
+            content = item.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+            if isinstance(content, list):
+                chunks = [c.get("text", "") for c in content if c.get("type") == "text"]
+                text = "\n".join(c for c in chunks if c).strip()
+                if text:
+                    return text
+        return ""
+
+    @staticmethod
+    def _assistant_requested_more_info(session: Session) -> bool:
+        """Detect whether assistant just asked user to补充信息."""
+        text = AgentLoop._last_assistant_text(session)
+        if not text:
+            return False
+        patterns = (
+            "请补充", "补充以下", "信息不足", "还不足以", "无法准确判断",
+            "需要更多信息", "请提供", "先补充",
+        )
+        return any(p in text for p in patterns)
+
+    @staticmethod
+    def _looks_information_sufficient(text: str) -> bool:
+        """Heuristic: determine whether补充信息已覆盖关键维度."""
+        checks = [
+            r"(20\d{2}[-/年]\d{1,2}([-/月]\d{1,2}日?)?|今天|昨日|昨晚|上午|下午|\d{1,2}:\d{2})",  # 时间
+            r"(站点|变电站|线路|馈线|区域|地点|位置|机房|环境|city|region)",  # 地点/范围
+            r"(电压|电流|告警|跳闸|波动|异常|报错|error|报警|持续|频率)",  # 异常/指标
+            r"(设备|变压器|对象|模块|系统|线路|feeder|transformer)",  # 对象
+        ]
+        hit = sum(1 for pattern in checks if re.search(pattern, text, re.IGNORECASE))
+        return hit >= 3
+
+    def _prepare_input_gate(self, session: Session, current_message: str) -> tuple[str, list[str]]:
+        """
+        Prepare merged user input and conditional skill loading for completeness gate.
+
+        Returns:
+            (possibly rewritten current_message, active_skill_names)
+        """
+        user_turns = sum(1 for m in session.messages if m.get("role") == "user")
+        gate: dict[str, Any] = dict(session.metadata.get(self._INPUT_GATE_META_KEY, {}))
+        gate_done = bool(gate.get("done"))
+        asked_for_more = self._assistant_requested_more_info(session)
+        activate_gate = (not gate_done) and (user_turns <= 1 or asked_for_more)
+
+        if "base_question" not in gate:
+            gate["base_question"] = current_message
+        supplements = gate.get("supplements")
+        if not isinstance(supplements, list):
+            supplements = []
+
+        merged_message = current_message
+        if asked_for_more:
+            supplements.append(current_message)
+            gate["supplements"] = supplements
+            merged_lines = [
+                "请将以下“原始问题 + 多次补充信息”合并为一个完整问题后再回答：",
+                f"原始问题：{gate.get('base_question', current_message)}",
+                "补充信息：",
+            ]
+            merged_lines.extend([f"{idx}. {item}" for idx, item in enumerate(supplements, start=1)])
+            merged_lines.append("如果信息已充分，请直接基于合并结果给出最终回答；不要重复要求已提供的信息。")
+            merged_message = "\n".join(merged_lines)
+            if self._looks_information_sufficient("\n".join([gate.get("base_question", ""), *supplements])):
+                gate["done"] = True
+                activate_gate = False
+
+        if gate.get("done"):
+            activate_gate = False
+        session.metadata[self._INPUT_GATE_META_KEY] = gate
+        return merged_message, ([self._INPUT_GATE_SKILL] if activate_gate else [])
 
     async def _run_agent_loop(
         self,
@@ -422,9 +504,11 @@ class AgentLoop:
                 message_tool.start_turn()
 
         history = session.get_history(max_messages=0)
+        prepared_message, active_skills = self._prepare_input_gate(session, msg.content)
         initial_messages = self.context.build_messages(
             history=history,
-            current_message=msg.content,
+            current_message=prepared_message,
+            skill_names=active_skills,
             media=msg.media if msg.media else None,
             channel=msg.channel, chat_id=msg.chat_id,
         )
