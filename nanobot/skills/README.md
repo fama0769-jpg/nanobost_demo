@@ -23,3 +23,5 @@ The skill format and metadata structure follow OpenClaw's conventions to maintai
 | `tmux` | Remote-control tmux sessions |
 | `clawhub` | Search and install skills from ClawHub registry |
 | `skill-creator` | Create new skills |
+| `question-completeness` | Validate whether a user request has enough context to answer |
+| `input-completeness-gate-zh` | 中文问题完整性守门：对话初始/补充阶段按需加载，先检查关键信息是否充分，再继续回答 |

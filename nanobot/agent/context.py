@@ -36,9 +36,11 @@ class ContextBuilder:
         if memory:
             parts.append(f"# Memory\n\n{memory}")
 
-        always_skills = self.skills.get_always_skills()
-        if always_skills:
-            always_content = self.skills.load_skills_for_context(always_skills)
+        active_skills = set(self.skills.get_always_skills())
+        if skill_names:
+            active_skills.update(skill_names)
+        if active_skills:
+            always_content = self.skills.load_skills_for_context(sorted(active_skills))
             if always_content:
                 parts.append(f"# Active Skills\n\n{always_content}")
 
