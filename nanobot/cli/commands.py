@@ -661,42 +661,22 @@ def agent(
     """Interact with the agent directly."""
     from loguru import logger
 
-    from nanobot.agent.loop import AgentLoop
-    from nanobot.bus.queue import MessageBus
-    from nanobot.config.paths import get_cron_dir
-    from nanobot.cron.service import CronService
+    from nanobot.cli.agent_api import AgentRuntimeAPI
 
     config = _load_runtime_config(config, workspace)
     _print_deprecated_memory_window_notice(config)
     sync_workspace_templates(config.workspace_path)
 
-    bus = MessageBus()
     provider = _make_provider(config)
-
-    # Create cron service for tool usage (no callback needed for CLI unless running)
-    cron_store_path = get_cron_dir() / "jobs.json"
-    cron = CronService(cron_store_path)
 
     if logs:
         logger.enable("nanobot")
     else:
         logger.disable("nanobot")
 
-    agent_loop = AgentLoop(
-        bus=bus,
-        provider=provider,
-        workspace=config.workspace_path,
-        model=config.agents.defaults.model,
-        max_iterations=config.agents.defaults.max_tool_iterations,
-        context_window_tokens=config.agents.defaults.context_window_tokens,
-        web_search_config=config.tools.web.search,
-        web_proxy=config.tools.web.proxy or None,
-        exec_config=config.tools.exec,
-        cron_service=cron,
-        restrict_to_workspace=config.tools.restrict_to_workspace,
-        mcp_servers=config.tools.mcp_servers,
-        channels_config=config.channels,
-    )
+    runtime_api = AgentRuntimeAPI.from_config(config, provider)
+    agent_loop = runtime_api.loop
+    bus = agent_loop.bus
 
     # Shared reference for progress callbacks
     _thinking: _ThinkingSpinner | None = None
@@ -715,10 +695,10 @@ def agent(
             nonlocal _thinking
             _thinking = _ThinkingSpinner(enabled=not logs)
             with _thinking:
-                response = await agent_loop.process_direct(message, session_id, on_progress=_cli_progress)
+                response = await runtime_api.ask(message, session_id, on_progress=_cli_progress)
             _thinking = None
             _print_agent_response(response, render_markdown=markdown)
-            await agent_loop.close_mcp()
+            await runtime_api.close()
 
         asyncio.run(run_once())
     else:
@@ -826,7 +806,7 @@ def agent(
                 agent_loop.stop()
                 outbound_task.cancel()
                 await asyncio.gather(bus_task, outbound_task, return_exceptions=True)
-                await agent_loop.close_mcp()
+                await runtime_api.close()
 
         asyncio.run(run_interactive())
 
