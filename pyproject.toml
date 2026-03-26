@@ -42,6 +42,7 @@ dependencies = [
     "qq-botpy>=1.2.0,<2.0.0",
     "python-socks[asyncio]>=2.8.0,<3.0.0",
     "prompt-toolkit>=3.0.50,<4.0.0",
+    "sanic>=24.12.0,<25.0.0",
     "mcp>=1.26.0,<2.0.0",
     "json-repair>=0.57.0,<1.0.0",
     "chardet>=3.0.2,<6.0.0",
@@ -72,6 +73,7 @@ dev = [
 
 [project.scripts]
 nanobot = "nanobot.cli.commands:app"
+nanobot-agent-api = "nanobot.server.agent_api_entry:main"
 
 [build-system]
 requires = ["hatchling"]
