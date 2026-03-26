@@ -1,11 +1,10 @@
 """CLI commands for nanobot."""
 
 import asyncio
-from contextlib import contextmanager, nullcontext
 import os
 import select
-import signal
 import sys
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -21,12 +20,11 @@ if sys.platform == "win32":
             pass
 
 import typer
-from prompt_toolkit import print_formatted_text
-from prompt_toolkit import PromptSession
+from prompt_toolkit import PromptSession, print_formatted_text
+from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.formatted_text import ANSI, HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout
-from prompt_toolkit.application import run_in_terminal
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
@@ -363,9 +361,9 @@ def _onboard_plugins(config_path: Path) -> None:
 
 def _make_provider(config: Config):
     """Create the appropriate LLM provider from config."""
+    from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
     from nanobot.providers.base import GenerationSettings
     from nanobot.providers.openai_codex_provider import OpenAICodexProvider
-    from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
 
     model = config.agents.defaults.model
     provider_name = config.get_provider_name(model)
@@ -649,166 +647,84 @@ def gateway(
 # ============================================================================
 
 
+class AgentService:
+    """Reusable runtime wrapper for calling the agent from CLI or HTTP."""
+
+    def __init__(self, runtime_api):
+        self.runtime_api = runtime_api
+
+    @classmethod
+    def from_runtime_options(
+        cls,
+        config_path: str | None = None,
+        workspace: str | None = None,
+        logs: bool = False,
+    ) -> "AgentService":
+        from loguru import logger
+
+        from nanobot.cli.agent_api import AgentRuntimeAPI
+
+        loaded_config = _load_runtime_config(config_path, workspace)
+        _print_deprecated_memory_window_notice(loaded_config)
+        sync_workspace_templates(loaded_config.workspace_path)
+        provider = _make_provider(loaded_config)
+
+        if logs:
+            logger.enable("nanobot")
+        else:
+            logger.disable("nanobot")
+
+        runtime_api = AgentRuntimeAPI.from_config(loaded_config, provider)
+        return cls(runtime_api=runtime_api)
+
+    async def ask(self, message: str, session_id: str) -> str:
+        """Send one query to the agent and return the response text."""
+        return await self.runtime_api.ask(message, session_id)
+
+    async def close(self) -> None:
+        """Release runtime resources."""
+        await self.runtime_api.close()
+
+
+async def agent_impl(
+    message: str,
+    session_id: str,
+    workspace: str | None = None,
+    config: str | None = None,
+    logs: bool = False,
+) -> str:
+    """Concrete implementation for a single-turn agent request."""
+    service = AgentService.from_runtime_options(
+        config_path=config,
+        workspace=workspace,
+        logs=logs,
+    )
+    try:
+        return await service.ask(message, session_id)
+    finally:
+        await service.close()
+
+
 @app.command()
 def agent(
-    message: str = typer.Option(None, "--message", "-m", help="Message to send to the agent"),
+    message: str = typer.Option(..., "--message", "-m", help="Message to send to the agent"),
     session_id: str = typer.Option("cli:direct", "--session", "-s", help="Session ID"),
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
     config: str | None = typer.Option(None, "--config", "-c", help="Config file path"),
     markdown: bool = typer.Option(True, "--markdown/--no-markdown", help="Render assistant output as Markdown"),
     logs: bool = typer.Option(False, "--logs/--no-logs", help="Show nanobot runtime logs during chat"),
 ):
-    """Interact with the agent directly."""
-    from loguru import logger
-
-    from nanobot.cli.agent_api import AgentRuntimeAPI
-
-    config = _load_runtime_config(config, workspace)
-    _print_deprecated_memory_window_notice(config)
-    sync_workspace_templates(config.workspace_path)
-
-    provider = _make_provider(config)
-
-    if logs:
-        logger.enable("nanobot")
-    else:
-        logger.disable("nanobot")
-
-    runtime_api = AgentRuntimeAPI.from_config(config, provider)
-    agent_loop = runtime_api.loop
-    bus = agent_loop.bus
-
-    # Shared reference for progress callbacks
-    _thinking: _ThinkingSpinner | None = None
-
-    async def _cli_progress(content: str, *, tool_hint: bool = False) -> None:
-        ch = agent_loop.channels_config
-        if ch and tool_hint and not ch.send_tool_hints:
-            return
-        if ch and not tool_hint and not ch.send_progress:
-            return
-        _print_cli_progress_line(content, _thinking)
-
-    if message:
-        # Single message mode — direct call, no bus needed
-        async def run_once():
-            nonlocal _thinking
-            _thinking = _ThinkingSpinner(enabled=not logs)
-            with _thinking:
-                response = await runtime_api.ask(message, session_id, on_progress=_cli_progress)
-            _thinking = None
-            _print_agent_response(response, render_markdown=markdown)
-            await runtime_api.close()
-
-        asyncio.run(run_once())
-    else:
-        # Interactive mode — route through bus like other channels
-        from nanobot.bus.events import InboundMessage
-        _init_prompt_session()
-        console.print(f"{__logo__} Interactive mode (type [bold]exit[/bold] or [bold]Ctrl+C[/bold] to quit)\n")
-
-        if ":" in session_id:
-            cli_channel, cli_chat_id = session_id.split(":", 1)
-        else:
-            cli_channel, cli_chat_id = "cli", session_id
-
-        def _handle_signal(signum, frame):
-            sig_name = signal.Signals(signum).name
-            _restore_terminal()
-            console.print(f"\nReceived {sig_name}, goodbye!")
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, _handle_signal)
-        signal.signal(signal.SIGTERM, _handle_signal)
-        # SIGHUP is not available on Windows
-        if hasattr(signal, 'SIGHUP'):
-            signal.signal(signal.SIGHUP, _handle_signal)
-        # Ignore SIGPIPE to prevent silent process termination when writing to closed pipes
-        # SIGPIPE is not available on Windows
-        if hasattr(signal, 'SIGPIPE'):
-            signal.signal(signal.SIGPIPE, signal.SIG_IGN)
-
-        async def run_interactive():
-            bus_task = asyncio.create_task(agent_loop.run())
-            turn_done = asyncio.Event()
-            turn_done.set()
-            turn_response: list[str] = []
-
-            async def _consume_outbound():
-                while True:
-                    try:
-                        msg = await asyncio.wait_for(bus.consume_outbound(), timeout=1.0)
-                        if msg.metadata.get("_progress"):
-                            is_tool_hint = msg.metadata.get("_tool_hint", False)
-                            ch = agent_loop.channels_config
-                            if ch and is_tool_hint and not ch.send_tool_hints:
-                                pass
-                            elif ch and not is_tool_hint and not ch.send_progress:
-                                pass
-                            else:
-                                await _print_interactive_progress_line(msg.content, _thinking)
-
-                        elif not turn_done.is_set():
-                            if msg.content:
-                                turn_response.append(msg.content)
-                            turn_done.set()
-                        elif msg.content:
-                            await _print_interactive_response(msg.content, render_markdown=markdown)
-
-                    except asyncio.TimeoutError:
-                        continue
-                    except asyncio.CancelledError:
-                        break
-
-            outbound_task = asyncio.create_task(_consume_outbound())
-
-            try:
-                while True:
-                    try:
-                        _flush_pending_tty_input()
-                        user_input = await _read_interactive_input_async()
-                        command = user_input.strip()
-                        if not command:
-                            continue
-
-                        if _is_exit_command(command):
-                            _restore_terminal()
-                            console.print("\nGoodbye!")
-                            break
-
-                        turn_done.clear()
-                        turn_response.clear()
-
-                        await bus.publish_inbound(InboundMessage(
-                            channel=cli_channel,
-                            sender_id="user",
-                            chat_id=cli_chat_id,
-                            content=user_input,
-                        ))
-
-                        nonlocal _thinking
-                        _thinking = _ThinkingSpinner(enabled=not logs)
-                        with _thinking:
-                            await turn_done.wait()
-                        _thinking = None
-
-                        if turn_response:
-                            _print_agent_response(turn_response[0], render_markdown=markdown)
-                    except KeyboardInterrupt:
-                        _restore_terminal()
-                        console.print("\nGoodbye!")
-                        break
-                    except EOFError:
-                        _restore_terminal()
-                        console.print("\nGoodbye!")
-                        break
-            finally:
-                agent_loop.stop()
-                outbound_task.cancel()
-                await asyncio.gather(bus_task, outbound_task, return_exceptions=True)
-                await runtime_api.close()
-
-        asyncio.run(run_interactive())
+    """Ask one question via CLI (implementation is shared with HTTP API)."""
+    response = asyncio.run(
+        agent_impl(
+            message=message,
+            session_id=session_id,
+            workspace=workspace,
+            config=config,
+            logs=logs,
+        )
+    )
+    _print_agent_response(response, render_markdown=markdown)
 
 
 # ============================================================================

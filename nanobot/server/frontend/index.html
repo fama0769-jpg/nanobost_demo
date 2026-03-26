@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nanobot 多会话问答</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f6fa; color: #111827; }
+    .layout { display: flex; height: 100vh; }
+    .sidebar {
+      width: 300px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 16px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sidebar input, .sidebar button {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: none;
+    }
+    .sidebar button { background: #2563eb; color: white; cursor: pointer; }
+    .session-list { overflow: auto; flex: 1; border-top: 1px solid #374151; margin-top: 6px; padding-top: 8px; }
+    .session-item {
+      background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 10px; margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .session-item.active { border-color: #60a5fa; }
+    .main { flex: 1; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; }
+    .chat-box {
+      flex: 1; background: white; border-radius: 10px; border: 1px solid #e5e7eb; padding: 14px; overflow: auto;
+    }
+    .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; white-space: pre-wrap; line-height: 1.5; }
+    .msg.user { background: #dbeafe; }
+    .msg.assistant { background: #f3f4f6; }
+    .composer { margin-top: 12px; display: flex; gap: 8px; }
+    .composer textarea { flex: 1; resize: vertical; min-height: 80px; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    .composer button { width: 130px; border: none; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+    .hint { font-size: 12px; color: #6b7280; margin: 6px 0 0; }
+    .error { color: #dc2626; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <strong>用户与会话</strong>
+      <input id="apiBase" placeholder="API 地址" />
+      <input id="userId" placeholder="用户ID，例如 user_001" value="user_001" />
+      <button id="loadSessionsBtn">加载会话</button>
+      <button id="newSessionBtn">新建会话</button>
+      <div id="sessionList" class="session-list"></div>
+    </aside>
+
+    <main class="main">
+      <h2 id="chatTitle">请选择会话</h2>
+      <div id="error" class="error"></div>
+      <div id="chatBox" class="chat-box"></div>
+      <p class="hint">同一会话内的多轮问答会使用同一个 session_id，便于上下文理解与历史存储。</p>
+      <div class="composer">
+        <textarea id="question" placeholder="输入你的问题..."></textarea>
+        <button id="sendBtn">发送</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const apiBaseInput = document.getElementById('apiBase');
+    const userIdInput = document.getElementById('userId');
+    const loadSessionsBtn = document.getElementById('loadSessionsBtn');
+    const newSessionBtn = document.getElementById('newSessionBtn');
+    const sessionListEl = document.getElementById('sessionList');
+    const chatTitleEl = document.getElementById('chatTitle');
+    const chatBoxEl = document.getElementById('chatBox');
+    const questionEl = document.getElementById('question');
+    const sendBtn = document.getElementById('sendBtn');
+    const errorEl = document.getElementById('error');
+
+    apiBaseInput.value = `${window.location.protocol}//${window.location.host}`;
+
+    let currentSessionId = null;
+    let currentUserId = userIdInput.value.trim();
+
+    function apiBase() {
+      return (apiBaseInput.value || `${window.location.protocol}//${window.location.host}`).trim();
+    }
+
+    function renderMessages(messages) {
+      chatBoxEl.innerHTML = '';
+      if (!messages.length) {
+        chatBoxEl.innerHTML = '<div class="hint">当前会话还没有消息，开始提问吧。</div>';
+        return;
+      }
+      messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `msg ${msg.role}`;
+        div.textContent = `${msg.role === 'user' ? '你' : '助手'}：${msg.content}`;
+        chatBoxEl.appendChild(div);
+      });
+      chatBoxEl.scrollTop = chatBoxEl.scrollHeight;
+    }
+
+    async function loadSessions() {
+      currentUserId = userIdInput.value.trim() || 'anonymous';
+      errorEl.textContent = '';
+      const res = await fetch(`${apiBase()}/api/agent/session/list?user_id=${encodeURIComponent(currentUserId)}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '加载会话失败');
+      renderSessionList(data.sessions || []);
+    }
+
+    function renderSessionList(sessions) {
+      sessionListEl.innerHTML = '';
+      if (!sessions.length) {
+        const p = document.createElement('div');
+        p.className = 'hint';
+        p.textContent = '暂无会话，点击“新建会话”开始。';
+        sessionListEl.appendChild(p);
+        return;
+      }
+      sessions.forEach(s => {
+        const item = document.createElement('div');
+        item.className = `session-item ${s.session_id === currentSessionId ? 'active' : ''}`;
+        item.innerHTML = `<div><strong>${s.title}</strong></div><div class="hint">${s.session_id.slice(0, 12)}... · ${s.turn_count}轮</div>`;
+        item.onclick = () => selectSession(s.session_id, s.title);
+        sessionListEl.appendChild(item);
+      });
+    }
+
+    async function selectSession(sessionId, title) {
+      currentSessionId = sessionId;
+      chatTitleEl.textContent = `会话：${title || sessionId}`;
+      errorEl.textContent = '';
+      await loadHistory();
+      await loadSessions();
+    }
+
+    async function loadHistory() {
+      if (!currentSessionId) return;
+      const url = `${apiBase()}/api/agent/session/history?user_id=${encodeURIComponent(currentUserId)}&session_id=${encodeURIComponent(currentSessionId)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '加载历史失败');
+      renderMessages(data.messages || []);
+    }
+
+    async function createSession() {
+      currentUserId = userIdInput.value.trim() || 'anonymous';
+      errorEl.textContent = '';
+      const res = await fetch(`${apiBase()}/api/agent/session/new`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUserId })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '创建会话失败');
+      await selectSession(data.session.session_id, data.session.title);
+    }
+
+    async function sendMessage() {
+      const message = questionEl.value.trim();
+      if (!message) {
+        errorEl.textContent = '请输入问题';
+        return;
+      }
+      if (!currentSessionId) {
+        await createSession();
+      }
+      sendBtn.disabled = true;
+      errorEl.textContent = '';
+      try {
+        const res = await fetch(`${apiBase()}/api/agent/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: currentUserId,
+            session_id: currentSessionId,
+            message,
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '问答请求失败');
+        currentSessionId = data.session_id;
+        questionEl.value = '';
+        await loadHistory();
+        await loadSessions();
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    loadSessionsBtn.onclick = async () => {
+      try { await loadSessions(); } catch (e) { errorEl.textContent = e.message || '加载失败'; }
+    };
+
+    newSessionBtn.onclick = async () => {
+      try { await createSession(); } catch (e) { errorEl.textContent = e.message || '创建失败'; }
+    };
+
+    sendBtn.onclick = async () => {
+      try { await sendMessage(); } catch (e) { errorEl.textContent = e.message || '发送失败'; }
+    };
+
+    loadSessions().catch(() => {});
+  </script>
+</body>
+</html>
