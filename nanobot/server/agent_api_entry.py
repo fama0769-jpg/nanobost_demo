@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from sanic import Sanic
 from sanic import response as sanic_response
 
 from nanobot import __logo__
 from nanobot.cli.commands import AgentService
-from nanobot.server.session_store import ChatSessionStore
 
 app = Sanic("nanobot-agent-api")
 app.config.REQUEST_MAX_SIZE = 20 * 1024 * 1024
@@ -56,11 +56,11 @@ async def query_agent(request):
         )
     created_session = False
     if not session_id:
-        session = app.ctx.session_store.create_session(user_id=user_id)
+        session = _create_web_session(user_id=user_id)
         session_id = session["session_id"]
         created_session = True
     else:
-        app.ctx.session_store.ensure_session(user_id=user_id, session_id=session_id)
+        _get_or_create_web_session(user_id=user_id, session_id=session_id)
 
     try:
         runtime_session_id = f"web:{user_id}:{session_id}"
@@ -70,13 +70,6 @@ async def query_agent(request):
         )
     except Exception as exc:
         return sanic_response.json({"success": False, "error": str(exc)}, status=500)
-
-    app.ctx.session_store.append_turn(
-        user_id=user_id,
-        session_id=session_id,
-        question=message,
-        answer=answer,
-    )
 
     return sanic_response.json(
         {
@@ -94,13 +87,13 @@ async def create_session(request):
     payload: dict[str, Any] = request.json or {}
     user_id = (payload.get("user_id") or "").strip() or "anonymous"
     title = (payload.get("title") or "").strip() or None
-    session = app.ctx.session_store.create_session(user_id=user_id, title=title)
+    session = _create_web_session(user_id=user_id, title=title)
     return sanic_response.json({"success": True, "user_id": user_id, "session": session})
 
 
 async def list_sessions(request):
     user_id = (request.args.get("user_id") or "").strip() or "anonymous"
-    sessions = app.ctx.session_store.list_sessions(user_id=user_id)
+    sessions = _list_web_sessions(user_id=user_id)
     return sanic_response.json({"success": True, "user_id": user_id, "sessions": sessions})
 
 
@@ -112,7 +105,7 @@ async def session_history(request):
             {"success": False, "error": "`session_id` is required"},
             status=400,
         )
-    history = app.ctx.session_store.get_history(user_id=user_id, session_id=session_id)
+    history = _get_web_history(user_id=user_id, session_id=session_id)
     return sanic_response.json(
         {
             "success": True,
@@ -125,12 +118,12 @@ async def session_history(request):
 
 @app.before_server_start
 async def init_agent_service(_app, _loop):
-    app.ctx.session_store = ChatSessionStore(app.ctx.store_path)
     app.ctx.agent_service = AgentService.from_runtime_options(
         config_path=app.ctx.config_path,
         workspace=app.ctx.workspace,
         logs=app.ctx.logs,
     )
+    app.ctx.session_manager = app.ctx.agent_service.runtime_api.loop.sessions
 
 
 @app.after_server_stop
@@ -147,17 +140,11 @@ def main() -> None:
     parser.add_argument("--workspace", type=str, default=None, help="Workspace directory override")
     parser.add_argument("--config", type=str, default=None, help="Config file path")
     parser.add_argument("--logs", action="store_true", help="Enable runtime logs")
-    parser.add_argument("--session-store", type=str, default=None, help="Session store JSON path")
     args = parser.parse_args()
 
     app.ctx.workspace = args.workspace
     app.ctx.config_path = args.config
     app.ctx.logs = args.logs
-    if args.session_store:
-        app.ctx.store_path = Path(args.session_store).expanduser()
-    else:
-        default_root = Path(args.workspace).expanduser() if args.workspace else Path.home() / ".nanobot"
-        app.ctx.store_path = default_root / "sessions" / "chat_sessions.json"
 
     app.add_route(health, "/api/agent/health", methods=["GET"])
     app.add_route(query_agent, "/api/agent/query", methods=["POST"])
@@ -182,3 +169,72 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def _session_key(user_id: str, session_id: str) -> str:
+    return f"web:{user_id}:{session_id}"
+
+
+def _get_or_create_web_session(user_id: str, session_id: str):
+    manager = app.ctx.session_manager
+    key = _session_key(user_id, session_id)
+    session = manager.get_or_create(key)
+    return session
+
+
+def _create_web_session(user_id: str, title: str | None = None) -> dict[str, Any]:
+    manager = app.ctx.session_manager
+    session_id = uuid4().hex
+    key = _session_key(user_id, session_id)
+    session = manager.get_or_create(key)
+    session.metadata["title"] = title or "新对话"
+    manager.save(session)
+    return {
+        "session_id": session_id,
+        "title": session.metadata.get("title", "新对话"),
+        "created_at": session.created_at.isoformat(),
+        "updated_at": session.updated_at.isoformat(),
+    }
+
+
+def _list_web_sessions(user_id: str) -> list[dict[str, Any]]:
+    manager = app.ctx.session_manager
+    prefix = f"web:{user_id}:"
+    sessions = []
+    for row in manager.list_sessions():
+        key = row.get("key", "")
+        if not key.startswith(prefix):
+            continue
+        session_id = key[len(prefix):]
+        session = manager.get_or_create(key)
+        sessions.append(
+            {
+                "session_id": session_id,
+                "title": session.metadata.get("title") or "新对话",
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "turn_count": len([m for m in session.messages if m.get("role") == "user"]),
+            }
+        )
+    sessions.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+    return sessions
+
+
+def _get_web_history(user_id: str, session_id: str) -> list[dict[str, Any]]:
+    session = _get_or_create_web_session(user_id, session_id)
+    history = []
+    for m in session.messages:
+        role = m.get("role")
+        if role not in {"user", "assistant"}:
+            continue
+        content = m.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        history.append(
+            {
+                "role": role,
+                "content": content,
+                "created_at": m.get("timestamp"),
+            }
+        )
+    return history
