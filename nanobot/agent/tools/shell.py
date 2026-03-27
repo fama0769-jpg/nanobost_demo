@@ -3,6 +3,7 @@
 import asyncio
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -91,25 +92,52 @@ class ExecTool(Tool):
             env["PATH"] = env.get("PATH", "") + os.pathsep + self.path_append
 
         try:
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                env=env,
-            )
+            process = None
+            use_asyncio_subprocess = True
+            try:
+                process = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                    env=env,
+                )
+            except NotImplementedError:
+                # Some runtimes (notably Windows with selector event loops) do not
+                # implement asyncio subprocess APIs. Fall back to a blocking
+                # subprocess call in a worker thread.
+                use_asyncio_subprocess = False
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=effective_timeout,
-                )
+                if use_asyncio_subprocess:
+                    assert process is not None
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=effective_timeout,
+                    )
+                    return_code = process.returncode
+                else:
+                    completed = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            subprocess.run,
+                            command,
+                            shell=True,
+                            capture_output=True,
+                            cwd=cwd,
+                            env=env,
+                        ),
+                        timeout=effective_timeout,
+                    )
+                    stdout = completed.stdout
+                    stderr = completed.stderr
+                    return_code = completed.returncode
             except asyncio.TimeoutError:
-                process.kill()
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    pass
+                if process is not None:
+                    process.kill()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        pass
                 return f"Error: Command timed out after {effective_timeout} seconds"
 
             output_parts = []
@@ -122,7 +150,7 @@ class ExecTool(Tool):
                 if stderr_text.strip():
                     output_parts.append(f"STDERR:\n{stderr_text}")
 
-            output_parts.append(f"\nExit code: {process.returncode}")
+            output_parts.append(f"\nExit code: {return_code}")
 
             result = "\n".join(output_parts) if output_parts else "(no output)"
 
