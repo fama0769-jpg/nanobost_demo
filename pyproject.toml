@@ -73,7 +73,7 @@ dev = [
 
 [project.scripts]
 nanobot = "nanobot.cli.commands:app"
-nanobot-agent-api = "nanobot.server.agent_api_entry:main"
+nanobot-agent-api = "nanobot.server.agent_api:main"
 
 [build-system]
 requires = ["hatchling"]

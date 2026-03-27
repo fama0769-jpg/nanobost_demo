@@ -136,20 +136,20 @@
 
 ```bash
 git clone https://github.com/HKUDS/nanobot.git
-cd nanobot
+cd cetclaw
 pip install -e .
 ```
 
 **Install with [uv](https://github.com/astral-sh/uv)** (stable, fast)
 
 ```bash
-uv tool install nanobot-ai
+uv tool install cetclaw-ai
 ```
 
 **Install from PyPI** (stable)
 
 ```bash
-pip install nanobot-ai
+pip install cetclaw-ai
 ```
 
 ### Update to latest version
@@ -157,22 +157,22 @@ pip install nanobot-ai
 **PyPI / pip**
 
 ```bash
-pip install -U nanobot-ai
-nanobot --version
+pip install -U cetclaw-ai
+cetclaw --version
 ```
 
 **uv**
 
 ```bash
-uv tool upgrade nanobot-ai
-nanobot --version
+uv tool upgrade cetclaw-ai
+cetclaw --version
 ```
 
 **Using WhatsApp?** Rebuild the local bridge after upgrading:
 
 ```bash
-rm -rf ~/.nanobot/bridge
-nanobot channels login
+rm -rf ~/.cetclaw/bridge
+cetclaw channels login
 ```
 
 ## 🚀 Quick Start
@@ -188,7 +188,7 @@ nanobot channels login
 **1. Initialize**
 
 ```bash
-nanobot onboard
+cetclaw onboard
 ```
 
 **2. Configure** (`~/.nanobot/config.json`)
@@ -221,7 +221,7 @@ Add or merge these **two parts** into your config (other options have defaults).
 **3. Chat**
 
 ```bash
-nanobot agent
+cetclaw agent
 ```
 
 That's it! You have a working AI assistant in 2 minutes.
@@ -274,7 +274,7 @@ Connect nanobot to your favorite chat platform. Want to build your own? See the 
 **3. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 </details>
@@ -297,7 +297,7 @@ nanobot will automatically register, configure `~/.nanobot/config.json`, and con
 **2. Restart gateway**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 That's it — nanobot handles the rest!
@@ -381,7 +381,7 @@ If you prefer to configure manually, add the following to `~/.nanobot/config.jso
 **6. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 </details>
@@ -392,7 +392,7 @@ nanobot gateway
 Install Matrix dependencies first:
 
 ```bash
-pip install nanobot-ai[matrix]
+pip install cetclaw-ai[matrix]
 ```
 
 **1. Create/choose a Matrix account**
@@ -416,7 +416,7 @@ pip install nanobot-ai[matrix]
     "matrix": {
       "enabled": true,
       "homeserver": "https://matrix.org",
-      "userId": "@nanobot:matrix.org",
+      "userId": "@cetclaw:matrix.org",
       "accessToken": "syt_xxx",
       "deviceId": "NANOBOT01",
       "e2eeEnabled": true,
@@ -447,7 +447,7 @@ pip install nanobot-ai[matrix]
 **4. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 </details>
@@ -460,7 +460,7 @@ Requires **Node.js ≥18**.
 **1. Link device**
 
 ```bash
-nanobot channels login
+cetclaw channels login
 # Scan QR with WhatsApp → Settings → Linked Devices
 ```
 
@@ -481,10 +481,10 @@ nanobot channels login
 
 ```bash
 # Terminal 1
-nanobot channels login
+cetclaw channels login
 
 # Terminal 2
-nanobot gateway
+cetclaw gateway
 ```
 
 > WhatsApp bridge updates are not applied automatically for existing installations.
@@ -532,7 +532,7 @@ Uses **WebSocket** long connection — no public IP required.
 **3. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 > [!TIP]
@@ -578,7 +578,7 @@ Uses **botpy SDK** with WebSocket — no public IP required. Currently supports 
 **4. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 Now send a message to the bot from QQ — it should respond!
@@ -619,7 +619,7 @@ Uses **Stream Mode** — no public IP required.
 **3. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 </details>
@@ -659,7 +659,7 @@ Uses **Socket Mode** — no public URL required.
 **4. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 DM the bot directly or @mention it in a channel — it should respond!
@@ -695,13 +695,13 @@ Give nanobot its own email account. It polls **IMAP** for incoming mail and repl
       "consentGranted": true,
       "imapHost": "imap.gmail.com",
       "imapPort": 993,
-      "imapUsername": "my-nanobot@gmail.com",
+      "imapUsername": "my-cetclaw@gmail.com",
       "imapPassword": "your-app-password",
       "smtpHost": "smtp.gmail.com",
       "smtpPort": 587,
-      "smtpUsername": "my-nanobot@gmail.com",
+      "smtpUsername": "my-cetclaw@gmail.com",
       "smtpPassword": "your-app-password",
-      "fromAddress": "my-nanobot@gmail.com",
+      "fromAddress": "my-cetclaw@gmail.com",
       "allowFrom": ["your-real-email@gmail.com"]
     }
   }
@@ -712,7 +712,7 @@ Give nanobot its own email account. It polls **IMAP** for incoming mail and repl
 **3. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 </details>
@@ -727,7 +727,7 @@ nanobot gateway
 **1. Install the optional dependency**
 
 ```bash
-pip install nanobot-ai[wecom]
+pip install cetclaw-ai[wecom]
 ```
 
 **2. Create a WeCom AI Bot**
@@ -752,7 +752,7 @@ Go to the WeCom admin console → Intelligent Robot → Create Robot → select 
 **4. Run**
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 </details>
@@ -812,7 +812,7 @@ Codex uses OAuth instead of API keys. Requires a ChatGPT Plus or Pro account.
 
 **1. Login:**
 ```bash
-nanobot provider login openai-codex
+cetclaw provider login openai-codex
 ```
 
 **2. Set model** (merge into `~/.nanobot/config.json`):
@@ -828,13 +828,13 @@ nanobot provider login openai-codex
 
 **3. Chat:**
 ```bash
-nanobot agent -m "Hello!"
+cetclaw agent -m "Hello!"
 
 # Target a specific workspace/config locally
-nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello!"
+cetclaw agent -c ~/.cetclaw-telegram/config.json -m "Hello!"
 
 # One-off workspace override on top of that config
-nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test -m "Hello!"
+cetclaw agent -c ~/.cetclaw-telegram/config.json -w /tmp/cetclaw-telegram-test -m "Hello!"
 ```
 
 > Docker users: use `docker run -it` for interactive OAuth login.
@@ -947,7 +947,7 @@ ProviderSpec(
     name="myprovider",                   # config field name
     keywords=("myprovider", "mymodel"),  # model-name keywords for auto-matching
     env_key="MYPROVIDER_API_KEY",        # env var for LiteLLM
-    display_name="My Provider",          # shown in `nanobot status`
+    display_name="My Provider",          # shown in `cetclaw status`
     litellm_prefix="myprovider",         # auto-prefix: model → myprovider/model
     skip_prefixes=("myprovider/",),      # don't double-prefix
 )
@@ -1177,9 +1177,9 @@ If you want each instance to have its own dedicated workspace from the start, pa
 
 ```bash
 # Create separate instance configs and workspaces
-nanobot onboard --config ~/.nanobot-telegram/config.json --workspace ~/.nanobot-telegram/workspace
-nanobot onboard --config ~/.nanobot-discord/config.json --workspace ~/.nanobot-discord/workspace
-nanobot onboard --config ~/.nanobot-feishu/config.json --workspace ~/.nanobot-feishu/workspace
+cetclaw onboard --config ~/.cetclaw-telegram/config.json --workspace ~/.cetclaw-telegram/workspace
+cetclaw onboard --config ~/.cetclaw-discord/config.json --workspace ~/.cetclaw-discord/workspace
+cetclaw onboard --config ~/.cetclaw-feishu/config.json --workspace ~/.cetclaw-feishu/workspace
 ```
 
 **Configure each instance:**
@@ -1190,13 +1190,13 @@ Edit `~/.nanobot-telegram/config.json`, `~/.nanobot-discord/config.json`, etc. w
 
 ```bash
 # Instance A - Telegram bot
-nanobot gateway --config ~/.nanobot-telegram/config.json
+cetclaw gateway --config ~/.cetclaw-telegram/config.json
 
 # Instance B - Discord bot  
-nanobot gateway --config ~/.nanobot-discord/config.json
+cetclaw gateway --config ~/.cetclaw-discord/config.json
 
 # Instance C - Feishu bot with custom port
-nanobot gateway --config ~/.nanobot-feishu/config.json --port 18792
+cetclaw gateway --config ~/.cetclaw-feishu/config.json --port 18792
 ```
 
 ### Path Resolution
@@ -1206,11 +1206,11 @@ When using `--config`, nanobot derives its runtime data directory from the confi
 To open a CLI session against one of these instances locally:
 
 ```bash
-nanobot agent -c ~/.nanobot-telegram/config.json -m "Hello from Telegram instance"
-nanobot agent -c ~/.nanobot-discord/config.json -m "Hello from Discord instance"
+cetclaw agent -c ~/.cetclaw-telegram/config.json -m "Hello from Telegram instance"
+cetclaw agent -c ~/.cetclaw-discord/config.json -m "Hello from Discord instance"
 
 # Optional one-off workspace override
-nanobot agent -c ~/.nanobot-telegram/config.json -w /tmp/nanobot-telegram-test
+cetclaw agent -c ~/.cetclaw-telegram/config.json -w /tmp/cetclaw-telegram-test
 ```
 
 > `nanobot agent` starts a local CLI agent using the selected workspace/config. It does not attach to or proxy through an already running `nanobot gateway` process.
@@ -1240,7 +1240,7 @@ Example config:
 {
   "agents": {
     "defaults": {
-      "workspace": "~/.nanobot-telegram/workspace",
+      "workspace": "~/.cetclaw-telegram/workspace",
       "model": "anthropic/claude-sonnet-4-6"
     }
   },
@@ -1259,14 +1259,14 @@ Example config:
 Start separate instances:
 
 ```bash
-nanobot gateway --config ~/.nanobot-telegram/config.json
-nanobot gateway --config ~/.nanobot-discord/config.json
+cetclaw gateway --config ~/.cetclaw-telegram/config.json
+cetclaw gateway --config ~/.cetclaw-discord/config.json
 ```
 
 Override workspace for one-off runs when needed:
 
 ```bash
-nanobot gateway --config ~/.nanobot-telegram/config.json --workspace /tmp/nanobot-telegram-test
+cetclaw gateway --config ~/.cetclaw-telegram/config.json --workspace /tmp/cetclaw-telegram-test
 ```
 
 ### Common Use Cases
@@ -1331,14 +1331,14 @@ The agent can also manage this file itself — ask it to "add a periodic task" a
 ### Docker Compose
 
 ```bash
-docker compose run --rm nanobot-cli onboard   # first-time setup
-vim ~/.nanobot/config.json                     # add API keys
-docker compose up -d nanobot-gateway           # start gateway
+docker compose run --rm cetclaw-cli onboard   # first-time setup
+vim ~/.cetclaw/config.json                     # add API keys
+docker compose up -d cetclaw-gateway           # start gateway
 ```
 
 ```bash
-docker compose run --rm nanobot-cli agent -m "Hello!"   # run CLI
-docker compose logs -f nanobot-gateway                   # view logs
+docker compose run --rm cetclaw-cli agent -m "Hello!"   # run CLI
+docker compose logs -f cetclaw-gateway                   # view logs
 docker compose down                                      # stop
 ```
 
@@ -1346,20 +1346,20 @@ docker compose down                                      # stop
 
 ```bash
 # Build the image
-docker build -t nanobot .
+docker build -t cetclaw .
 
 # Initialize config (first time only)
-docker run -v ~/.nanobot:/root/.nanobot --rm nanobot onboard
+docker run -v ~/.cetclaw:/root/.cetclaw --rm cetclaw onboard
 
 # Edit config on host to add API keys
-vim ~/.nanobot/config.json
+vim ~/.cetclaw/config.json
 
 # Run gateway (connects to enabled channels, e.g. Telegram/Discord/Mochat)
-docker run -v ~/.nanobot:/root/.nanobot -p 18790:18790 nanobot gateway
+docker run -v ~/.cetclaw:/root/.cetclaw -p 18790:18790 cetclaw gateway
 
 # Or run a single command
-docker run -v ~/.nanobot:/root/.nanobot --rm nanobot agent -m "Hello!"
-docker run -v ~/.nanobot:/root/.nanobot --rm nanobot status
+docker run -v ~/.cetclaw:/root/.cetclaw --rm cetclaw agent -m "Hello!"
+docker run -v ~/.cetclaw:/root/.cetclaw --rm cetclaw status
 ```
 
 ## 🐧 Linux Service
@@ -1369,7 +1369,7 @@ Run the gateway as a systemd user service so it starts automatically and restart
 **1. Find the nanobot binary path:**
 
 ```bash
-which nanobot   # e.g. /home/user/.local/bin/nanobot
+which cetclaw   # e.g. /home/user/.local/bin/cetclaw
 ```
 
 **2. Create the service file** at `~/.config/systemd/user/nanobot-gateway.service` (replace `ExecStart` path if needed):
@@ -1396,15 +1396,15 @@ WantedBy=default.target
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now nanobot-gateway
+systemctl --user enable --now cetclaw-gateway
 ```
 
 **Common operations:**
 
 ```bash
-systemctl --user status nanobot-gateway        # check status
-systemctl --user restart nanobot-gateway       # restart after config changes
-journalctl --user -u nanobot-gateway -f        # follow logs
+systemctl --user status cetclaw-gateway        # check status
+systemctl --user restart cetclaw-gateway       # restart after config changes
+journalctl --user -u cetclaw-gateway -f        # follow logs
 ```
 
 If you edit the `.service` file itself, run `systemctl --user daemon-reload` before restarting.

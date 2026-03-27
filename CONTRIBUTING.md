@@ -72,7 +72,7 @@ Keep setup boring and reliable. The goal is to get you into the code quickly:
 ```bash
 # Clone the repository
 git clone https://github.com/HKUDS/nanobot.git
-cd nanobot
+cd cetclaw
 
 # Install with dev dependencies
 pip install -e ".[dev]"
@@ -81,10 +81,10 @@ pip install -e ".[dev]"
 pytest
 
 # Lint code
-ruff check nanobot/
+ruff check cetclaw/
 
 # Format code
-ruff format nanobot/
+ruff format cetclaw/
 ```
 
 ## Code Style

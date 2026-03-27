@@ -22,7 +22,7 @@ We aim to respond to security reports within 48 hours.
 
 ```bash
 # ✅ Good: Store in config file with restricted permissions
-chmod 600 ~/.nanobot/config.json
+chmod 600 ~/.cetclaw/config.json
 
 # ❌ Bad: Hardcoding keys in code or committing them
 ```
@@ -109,7 +109,7 @@ pip install pip-audit
 pip-audit
 
 # Update to latest secure versions
-pip install --upgrade nanobot-ai
+pip install --upgrade cetclaw-ai
 ```
 
 For Node.js dependencies (WhatsApp bridge):
@@ -133,26 +133,26 @@ For production use:
    ```bash
    # Run in a container or VM
    docker run --rm -it python:3.11
-   pip install nanobot-ai
+   pip install cetclaw-ai
    ```
 
 2. **Use a Dedicated User**
    ```bash
-   sudo useradd -m -s /bin/bash nanobot
-   sudo -u nanobot nanobot gateway
+   sudo useradd -m -s /bin/bash cetclaw
+   sudo -u cetclaw cetclaw gateway
    ```
 
 3. **Set Proper Permissions**
    ```bash
-   chmod 700 ~/.nanobot
-   chmod 600 ~/.nanobot/config.json
-   chmod 700 ~/.nanobot/whatsapp-auth
+   chmod 700 ~/.cetclaw
+   chmod 600 ~/.cetclaw/config.json
+   chmod 700 ~/.cetclaw/whatsapp-auth
    ```
 
 4. **Enable Logging**
    ```bash
    # Configure log monitoring
-   tail -f ~/.nanobot/logs/nanobot.log
+   tail -f ~/.cetclaw/logs/cetclaw.log
    ```
 
 5. **Use Rate Limiting**
@@ -163,7 +163,7 @@ For production use:
 6. **Regular Updates**
    ```bash
    # Check for updates weekly
-   pip install --upgrade nanobot-ai
+   pip install --upgrade cetclaw-ai
    ```
 
 ### 8. Development vs Production
@@ -195,7 +195,7 @@ If you suspect a security breach:
 1. **Immediately revoke compromised API keys**
 2. **Review logs for unauthorized access**
    ```bash
-   grep "Access denied" ~/.nanobot/logs/nanobot.log
+   grep "Access denied" ~/.cetclaw/logs/cetclaw.log
    ```
 3. **Check for unexpected file modifications**
 4. **Rotate all credentials**

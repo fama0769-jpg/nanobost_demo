@@ -3,11 +3,11 @@ x-common-config: &common-config
     context: .
     dockerfile: Dockerfile
   volumes:
-    - ~/.nanobot:/root/.nanobot
+    - ~/.cetclaw:/root/.cetclaw
 
 services:
   nanobot-gateway:
-    container_name: nanobot-gateway
+    container_name: cetclaw-gateway
     <<: *common-config
     command: ["gateway"]
     restart: unless-stopped

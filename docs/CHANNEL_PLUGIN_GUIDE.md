@@ -42,8 +42,8 @@ from typing import Any
 from aiohttp import web
 from loguru import logger
 
-from nanobot.channels.base import BaseChannel
-from nanobot.bus.events import OutboundMessage
+from cetclaw.channels.base import BaseChannel
+from cetclaw.bus.events import OutboundMessage
 
 
 class WebhookChannel(BaseChannel):
@@ -97,7 +97,7 @@ class WebhookChannel(BaseChannel):
         sender = body.get("sender", "unknown")
         chat_id = body.get("chat_id", sender)
         text = body.get("text", "")
-        media = body.get("media", [])       # list of URLs
+        media = body.get("media", [])  # list of URLs
 
         # This is the key call: validates allowFrom, then puts the
         # message onto the bus for the agent to process.
@@ -134,8 +134,8 @@ The key (`webhook`) becomes the config section name. The value points to your `B
 
 ```bash
 pip install -e .
-nanobot plugins list      # verify "Webhook" shows as "plugin"
-nanobot onboard           # auto-adds default config for detected plugins
+cetclaw plugins list      # verify "Webhook" shows as "plugin"
+cetclaw onboard           # auto-adds default config for detected plugins
 ```
 
 Edit `~/.nanobot/config.json`:
@@ -155,7 +155,7 @@ Edit `~/.nanobot/config.json`:
 ### 4. Run & Test
 
 ```bash
-nanobot gateway
+cetclaw gateway
 ```
 
 In another terminal:
@@ -236,16 +236,16 @@ If not overridden, the base class returns `{"enabled": false}`.
 
 ```bash
 git clone https://github.com/you/nanobot-channel-webhook
-cd nanobot-channel-webhook
+cd cetclaw-channel-webhook
 pip install -e .
-nanobot plugins list    # should show "Webhook" as "plugin"
-nanobot gateway         # test end-to-end
+cetclaw plugins list    # should show "Webhook" as "plugin"
+cetclaw gateway         # test end-to-end
 ```
 
 ## Verify
 
 ```bash
-$ nanobot plugins list
+$ cetclaw plugins list
 
   Name       Source    Enabled
   telegram   builtin  yes

@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nanobot 多会话问答</title>
+  <!-- Markdown 解析 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- 代码高亮 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f6fa; color: #111827; }
+    .layout { display: flex; height: 100vh; }
+    .sidebar {
+      width: 300px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 16px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sidebar input, .sidebar button {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: none;
+    }
+    .sidebar button { background: #2563eb; color: white; cursor: pointer; }
+    .session-list { overflow: auto; flex: 1; border-top: 1px solid #374151; margin-top: 6px; padding-top: 8px; }
+    .session-item {
+      background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 10px; margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .session-item.active { border-color: #60a5fa; }
+    .main { flex: 1; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; }
+    .chat-box {
+      flex: 1; background: white; border-radius: 10px; border: 1px solid #e5e7eb; padding: 14px; overflow: auto;
+    }
+    .msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; line-height: 1.4; }
+    .msg.user { background: #dbeafe; white-space: pre-wrap; }
+    .msg.assistant { background: #f3f4f6; white-space: normal; line-height: 1.5; }
+    .composer { margin-top: 12px; display: flex; gap: 8px; }
+    .composer textarea { flex: 1; resize: vertical; min-height: 80px; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    .composer button { width: 130px; border: none; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+    .hint { font-size: 12px; color: #6b7280; margin: 6px 0 0; }
+    .error { color: #dc2626; font-size: 13px; }
+    /* Markdown 元素样式 - 紧凑排版 */
+    .msg.assistant h1, .msg.assistant h2, .msg.assistant h3 {
+      margin-top: 0.3em;
+      margin-bottom: 0.15em;
+      line-height: 1.3;
+    }
+    .msg.assistant h1 { font-size: 1.4em; }
+    .msg.assistant h2 { font-size: 1.25em; }
+    .msg.assistant h3 { font-size: 1.1em; }
+    /* 段落间距：移除默认margin，只在段落之间添加间距 */
+    .msg.assistant p { margin: 0; }
+    .msg.assistant p + p { margin-top: 0.5em; }
+    .msg.assistant ul, .msg.assistant ol { margin: 0.3em 0; padding-left: 1.5em; }
+    .msg.assistant li { margin: 0.05em 0; }
+    .msg.assistant code {
+      background: #e5e7eb;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+    }
+    .msg.assistant pre {
+      background: #1e293b;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 0.4em 0;
+    }
+    .msg.assistant pre code {
+      background: transparent;
+      padding: 0;
+      color: #e2e8f0;
+    }
+    .msg.assistant blockquote {
+      border-left: 3px solid #6b7280;
+      margin: 0.4em 0;
+      padding-left: 10px;
+      color: #4b5563;
+    }
+    .msg.assistant table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 0.4em 0;
+    }
+    .msg.assistant th, .msg.assistant td {
+      border: 1px solid #d1d5db;
+      padding: 6px 10px;
+    }
+    .msg.assistant th {
+      background: #f3f4f6;
+    }
+    .msg.assistant a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+    .msg.assistant a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <strong>用户与会话</strong>
+      <input id="apiBase" placeholder="API 地址" />
+      <input id="userId" placeholder="用户ID，例如 user_001" value="user_001" />
+      <button id="loadSessionsBtn">加载会话</button>
+      <button id="newSessionBtn">新建会话</button>
+      <div id="sessionList" class="session-list"></div>
+    </aside>
+
+    <main class="main">
+      <h2 id="chatTitle">请选择会话</h2>
+      <div id="error" class="error"></div>
+      <div id="chatBox" class="chat-box"></div>
+      <p class="hint">同一会话内的多轮问答会使用同一个 session_id，便于上下文理解与历史存储。</p>
+      <div class="composer">
+        <textarea id="question" placeholder="输入你的问题..."></textarea>
+        <button id="sendBtn">发送</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // 配置 marked 使用 highlight.js 进行代码高亮
+    marked.setOptions({
+      highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return hljs.highlightAuto(code).value;
+      },
+      breaks: true,  // 支持换行符
+      gfm: true      // GitHub 风格 Markdown
+    });
+
+    // 转义 HTML 防止 XSS（用于用户消息）
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 渲染 markdown 内容（用于助手消息）
+    function renderMarkdown(content) {
+      return marked.parse(content);
+    }
+
+    const apiBaseInput = document.getElementById('apiBase');
+    const userIdInput = document.getElementById('userId');
+    const loadSessionsBtn = document.getElementById('loadSessionsBtn');
+    const newSessionBtn = document.getElementById('newSessionBtn');
+    const sessionListEl = document.getElementById('sessionList');
+    const chatTitleEl = document.getElementById('chatTitle');
+    const chatBoxEl = document.getElementById('chatBox');
+    const questionEl = document.getElementById('question');
+    const sendBtn = document.getElementById('sendBtn');
+    const errorEl = document.getElementById('error');
+
+    apiBaseInput.value = `${window.location.protocol}//${window.location.host}`;
+
+    let currentSessionId = null;
+    let currentUserId = userIdInput.value.trim();
+
+    function apiBase() {
+      return (apiBaseInput.value || `${window.location.protocol}//${window.location.host}`).trim();
+    }
+
+    function renderMessages(messages) {
+      chatBoxEl.innerHTML = '';
+      if (!messages.length) {
+        chatBoxEl.innerHTML = '<div class="hint">当前会话还没有消息，开始提问吧。</div>';
+        return;
+      }
+      messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `msg ${msg.role}`;
+        const prefix = msg.role === 'user' ? '你：' : '助手：';
+        if (msg.role === 'user') {
+          div.innerHTML = prefix + escapeHtml(msg.content);
+        } else {
+          div.innerHTML = prefix + renderMarkdown(msg.content);
+        }
+        chatBoxEl.appendChild(div);
+      });
+      chatBoxEl.scrollTop = chatBoxEl.scrollHeight;
+    }
+
+    async function loadSessions() {
+      currentUserId = userIdInput.value.trim() || 'anonymous';
+      errorEl.textContent = '';
+      const res = await fetch(`${apiBase()}/api/agent/session/list?user_id=${encodeURIComponent(currentUserId)}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '加载会话失败');
+      renderSessionList(data.sessions || []);
+    }
+
+    function renderSessionList(sessions) {
+      sessionListEl.innerHTML = '';
+      if (!sessions.length) {
+        const p = document.createElement('div');
+        p.className = 'hint';
+        p.textContent = '暂无会话，点击“新建会话”开始。';
+        sessionListEl.appendChild(p);
+        return;
+      }
+      sessions.forEach(s => {
+        const item = document.createElement('div');
+        item.className = `session-item ${s.session_id === currentSessionId ? 'active' : ''}`;
+        item.innerHTML = `<div><strong>${s.title}</strong></div><div class="hint">${s.session_id.slice(0, 12)}... · ${s.turn_count}轮</div>`;
+        item.onclick = () => selectSession(s.session_id, s.title);
+        sessionListEl.appendChild(item);
+      });
+    }
+
+    async function selectSession(sessionId, title) {
+      currentSessionId = sessionId;
+      chatTitleEl.textContent = `会话：${title || sessionId}`;
+      errorEl.textContent = '';
+      await loadHistory();
+      await loadSessions();
+    }
+
+    async function loadHistory() {
+      if (!currentSessionId) return;
+      const url = `${apiBase()}/api/agent/session/history?user_id=${encodeURIComponent(currentUserId)}&session_id=${encodeURIComponent(currentSessionId)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '加载历史失败');
+      renderMessages(data.messages || []);
+    }
+
+    async function createSession() {
+      currentUserId = userIdInput.value.trim() || 'anonymous';
+      errorEl.textContent = '';
+      const res = await fetch(`${apiBase()}/api/agent/session/new`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUserId })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '创建会话失败');
+      await selectSession(data.session.session_id, data.session.title);
+    }
+
+    async function sendMessage() {
+      const message = questionEl.value.trim();
+      if (!message) {
+        errorEl.textContent = '请输入问题';
+        return;
+      }
+      if (!currentSessionId) {
+        await createSession();
+      }
+
+      // 立即清空输入框
+      questionEl.value = '';
+
+      // 立即显示用户问题
+      appendMessage('user', message);
+
+      // 显示"正在思考"提示
+      const loadingId = appendLoadingIndicator();
+
+      sendBtn.disabled = true;
+      errorEl.textContent = '';
+
+      try {
+        const res = await fetch(`${apiBase()}/api/agent/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: currentUserId,
+            session_id: currentSessionId,
+            message,
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          // Use user_message if available, otherwise fall back to error
+          const userMessage = data.user_message || data.error || '问答请求失败';
+          throw new Error(userMessage);
+        }
+        currentSessionId = data.session_id;
+
+        // 移除加载提示，追加助手回答
+        removeLoadingIndicator(loadingId);
+        appendMessage('assistant', data.response);
+
+        // 刷新会话列表（更新轮数）
+        await loadSessions();
+      } catch (e) {
+        removeLoadingIndicator(loadingId);
+        const errorMsg = e.message || '发送失败';
+        // 显示更详细的错误信息
+        errorEl.textContent = errorMsg + ' (点击查看详情)';
+        errorEl.style.cursor = 'pointer';
+        errorEl.onclick = () => {
+          alert(errorMsg + '\n\n请检查：\n1. 网络连接是否正常\n2. API 配置是否正确\n3. 查看后端日志获取更多信息');
+        };
+        throw e;
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    // 新增辅助函数：追加单条消息
+    function appendMessage(role, content) {
+      // 移除空提示
+      const hint = chatBoxEl.querySelector('.hint');
+      if (hint && hint.textContent.includes('还没有消息')) {
+        chatBoxEl.innerHTML = '';
+      }
+
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      const prefix = role === 'user' ? '你：' : '助手：';
+      if (role === 'user') {
+        div.innerHTML = prefix + escapeHtml(content);
+      } else {
+        div.innerHTML = prefix + renderMarkdown(content);
+      }
+      chatBoxEl.appendChild(div);
+      chatBoxEl.scrollTop = chatBoxEl.scrollHeight;
+    }
+
+    // 新增辅助函数：显示加载提示
+    function appendLoadingIndicator() {
+      const id = 'loading-' + Date.now();
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = 'msg assistant hint';
+      div.textContent = '助手正在思考...';
+      chatBoxEl.appendChild(div);
+      chatBoxEl.scrollTop = chatBoxEl.scrollHeight;
+      return id;
+    }
+
+    // 新增辅助函数：移除加载提示
+    function removeLoadingIndicator(id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+
+    loadSessionsBtn.onclick = async () => {
+      try { await loadSessions(); } catch (e) { errorEl.textContent = e.message || '加载失败'; }
+    };
+
+    newSessionBtn.onclick = async () => {
+      try { await createSession(); } catch (e) { errorEl.textContent = e.message || '创建失败'; }
+    };
+
+    sendBtn.onclick = async () => {
+      try { await sendMessage(); } catch (e) { errorEl.textContent = e.message || '发送失败'; }
+    };
+
+    loadSessions().catch(() => {});
+  </script>
+</body>
+</html>
